@@ -12,10 +12,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <main className="flex min-h-screen w-full flex-col justify-between">
-      <Navbar />
-      <div className="w-full grow">{children}</div>
-      <Footer />
-    </main>
+    <>
+      <main className="flex min-h-screen w-full flex-col justify-between">
+        <Navbar />
+        <div className="w-full grow">{children}</div>
+        <Footer />
+      </main>
+    </>
   );
 }

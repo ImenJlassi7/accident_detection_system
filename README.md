@@ -49,12 +49,3 @@ python prepare_dataset.py /chemin/vers/archive_extraite dataset_yolo
 python train.py --data dataset_yolo/data.yaml --epochs 50
 # puis dans config.py : USE_CUSTOM_MODEL = True
 ```
-
-## Prochaine étape proposée
-
-Module 4 (Tracking) : attribuer un ID persistant à chaque véhicule avec
-ByteTrack, pour pouvoir ensuite calculer vitesses/trajectoires sur
-plusieurs frames — indispensable avant la logique d'accident. Comme le
-dataset est composé d'images isolées (pas une vraie séquence vidéo
-continue), il faudra une courte vidéo de trafic (mentionnée dans le
-cahier des charges, section 8) pour tester le tracking correctement.

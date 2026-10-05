@@ -1,0 +1,5 @@
+path: C:\Users\user\Desktop\GI2_S3\Computer_Vison2\accident_detection_system\dataset_yolo
+train: images/train
+val: images/val
+nc: 8
+names: ['auto', 'bus', 'car', 'lcv', 'motorcycle', 'multiaxle', 'tractor', 'truck']

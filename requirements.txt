@@ -1,0 +1,11 @@
+# Modules 1-4 (actuels)
+ultralytics>=8.3
+opencv-python>=4.9
+numpy>=1.26
+lap>=0.5.12          # requis par le tracker ByteTrack (Ultralytics l'installe auto si absent)
+
+# Modules 5-11 (étapes suivantes)
+# pandas>=2.2
+# streamlit>=1.38
+# geopy>=2.4          # distance/hôpitaux les plus proches
+# smtplib / email     # inclus dans la stdlib Python, pour l'alerte e-mail

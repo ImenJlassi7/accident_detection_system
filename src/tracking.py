@@ -18,6 +18,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 import config
 from detection import VehicleDetector, Detection
 
+import numpy as np
 
 @dataclass
 class TrackedDetection(Detection):
@@ -66,7 +67,8 @@ class VehicleTracker:
                         track_id=tid,
                     )
                     frame_dets.append(det)
-                    cx, cy = det.center
+                    #cx, cy = det.center (replaced by the following line)
+                    cx, cy = (det.x1 + det.x2) / 2, det.y2
                     self.history[tid].append((frame_id, cx, cy))
             yield frame_id, frame_dets
 
@@ -74,6 +76,24 @@ class VehicleTracker:
         """Retourne l'historique (frame_id, cx, cy) d'un véhicule suivi."""
         return self.history.get(track_id, [])
 
+def id_color(track_id: int):
+    """A stable, distinct color per vehicle ID."""
+    rng = np.random.default_rng(track_id)
+    return tuple(int(c) for c in rng.integers(60, 255, 3))
+
+
+def draw_trajectory(frame, points, color, max_len=40, smooth=3):
+    """Draw the last `max_len` positions as a polyline, lightly smoothed."""
+    pts = np.array(points[-max_len:], dtype=np.float32)
+    if len(pts) < 2:
+        return
+    if len(pts) >= smooth:
+        kernel = np.ones(smooth) / smooth
+        pts = np.stack([np.convolve(pts[:, 0], kernel, mode="valid"),
+                        np.convolve(pts[:, 1], kernel, mode="valid")], axis=1)
+    pts = pts.astype(np.int32)
+    cv2.polylines(frame, [pts.reshape(-1, 1, 2)], False, color, 2, cv2.LINE_AA)
+    cv2.circle(frame, (int(pts[-1, 0]), int(pts[-1, 1])), 4, color, -1)
 
 def annotate_and_save(source: str, output_path: str, tracker: "VehicleTracker" = None):
     """Génère une vidéo annotée (boxes + ID) pour vérification visuelle."""
@@ -100,10 +120,14 @@ def annotate_and_save(source: str, output_path: str, tracker: "VehicleTracker" =
             dets = []
         for d in dets:
             x1, y1, x2, y2 = map(int, d.bbox_xyxy)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            color = id_color(d.track_id)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             label = f"ID{d.track_id} {d.class_name}"
-            cv2.putText(frame, label, (x1, max(y1 - 8, 0)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(frame, label, (x1, max(y1 - 8, 12)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+            points = [(cx, cy) for _, cx, cy in tracker.history[d.track_id]]
+            draw_trajectory(frame, points, color)
         writer.write(frame)
         n_written += 1
     writer.release()

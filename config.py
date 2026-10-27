@@ -22,7 +22,7 @@ DB_PATH = BASE_DIR / "outputs" / "events.db"
 # USE_CUSTOM_MODEL = False -> démarrage rapide avec YOLOv8n pré-entraîné COCO
 # USE_CUSTOM_MODEL = True  -> pointer YOLO_MODEL_PATH vers le best.pt obtenu
 #                              après entraînement sur le dataset 8 classes
-USE_CUSTOM_MODEL = True
+USE_CUSTOM_MODEL = False
 CONFIDENCE_THRESHOLD = 0.35
 
 if USE_CUSTOM_MODEL:
@@ -39,15 +39,9 @@ if USE_CUSTOM_MODEL:
         7: "truck",
     }
 else:
-    YOLO_MODEL_PATH = "yolov8n.pt"
+    YOLO_MODEL_PATH = "yolo26n.pt"
     # Classes COCO pertinentes pour le trafic routier (id COCO -> nom)
-    VEHICLE_CLASSES = {
-        1: "bicycle",
-        2: "car",
-        3: "motorcycle",
-        5: "bus",
-        7: "truck",
-    }
+    VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 
 # --- Module Tracking (étape suivante) ---
 TRACKER_TYPE = "bytetrack"  # ou "deepsort"

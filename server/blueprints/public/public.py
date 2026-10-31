@@ -6,6 +6,11 @@ import os
 from ultralytics import YOLO
 from werkzeug.utils import secure_filename
 import cv2
+from datetime import datetime
+from io import BytesIO
+from blueprints.accident.accident import accidents_collection
+import cloudinary
+import cloudinary.uploader
 
 # PUBLIC BLUEPRINT...
 public_bp = Blueprint('public',__name__, url_prefix='/api/v1/public')
@@ -37,6 +42,97 @@ def generate_frames(path_x = ''):
         frame=buffer.tobytes()
         yield (b'--frame\r\n'
                     b'Content-Type: image/jpeg\r\n\r\n' + frame +b'\r\n')
+
+
+def detect_and_save_accident(video_path):
+    # Charger le modèle personnalisé qui reconnaît la classe Accident
+    model_path = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            '..', '..', 'models', 'i1-yolov8s.pt'
+        )
+    )
+    model = YOLO(model_path)
+
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        raise ValueError("Impossible d'ouvrir la vidéo.")
+
+    confidence_threshold = 0.50
+    best_confidence = confidence_threshold
+    best_frame = None
+    frame_index = 0
+
+    # Analyser une image sur trois
+    while True:
+        success, frame = cap.read()
+
+        if not success:
+            break
+
+        if frame_index % 3 == 0:
+            result = model.predict(
+                source=frame,
+                conf=confidence_threshold,
+                verbose=False
+            )[0]
+
+            if result.boxes is not None and len(result.boxes) > 0:
+                confidences = result.boxes.conf.tolist()
+                current_confidence = max(confidences)
+
+                if current_confidence >= best_confidence:
+                    best_confidence = current_confidence
+                    best_frame = frame.copy()
+
+        frame_index += 1
+
+    cap.release()
+
+    # Aucun accident détecté au-dessus du seuil
+    if best_frame is None:
+        return None
+
+    # Convertir l'image capturée en JPEG
+    success, buffer = cv2.imencode(".jpg", best_frame)
+
+    if not success:
+        raise ValueError("Impossible de capturer l'image de l'accident.")
+
+    # Configurer Cloudinary
+    cloudinary.config(
+        cloud_name=os.getenv("CLOUD_NAME"),
+        api_key=os.getenv("API_KEY"),
+        api_secret=os.getenv("API_SECRET")
+    )
+
+    # Enregistrer l'image capturée sur Cloudinary
+    image_response = cloudinary.uploader.upload(
+        BytesIO(buffer.tobytes()),
+        folder="accident_frames"
+    )
+    image_url = image_response.get("secure_url") or image_response["url"]
+
+    # Créer un enregistrement MongoDB
+    accident = {
+        "address": "Non renseignée",
+        "city": "Non renseignée",
+        "latitude": None,
+        "longitude": None,
+        "severityInPercentage": None,
+        "severity": "Non évaluée",
+        "detectionConfidence": round(best_confidence * 100, 2),
+        "date": datetime.now(),
+        "image_url": image_url
+    }
+
+    result = accidents_collection.insert_one(accident)
+
+    return {
+        "id": str(result.inserted_id),
+        "confidence": round(best_confidence * 100, 2)
+    }
         
 # ROUTES FOR HOME...
 @public_bp.route('/',methods=['GET'])
@@ -63,24 +159,59 @@ def detect_object():
 
 # ROUTES FOR UPLOAD VIDEO...
 @public_bp.route('/upload-video', methods=['POST'])
+@public_bp.route('/upload-video', methods=['POST'])
 def api_video():
-    print('🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥')
-    print(request.method)
-    video_file = request.files['image']
-    video_file.save(os.path.join(current_app.config['UPLOAD_FOLDER'],secure_filename(video_file.filename)))
-    # video_path = os.path.join(app.config['UPLOAD_FOLDER'],secure_filename(video_file.filename))
-    video_path = video_file.filename
-    if request.method == 'POST':
-        # session['video_path'] = os.path.join(os.path.abspath(os.path.dirname(__file__)), app.config['UPLOAD_FOLDER'],secure_filename(video_file.filename))
-        # session['video_path'] = 'static/videos/bikes.mp4'
-        return Response(
-            json.dumps({
-                "status": "success",
-                "path": video_path
-            }),
-        )
-        # return Response(generate_frames(path_x='static/videos/Accident-1.mp4'), mimetype='multipart/x-mixed-replace; boundary=frame')
-    
+    video_file = request.files.get('image')
+
+    if video_file is None or video_file.filename == '':
+        return jsonify({
+            "status": "error",
+            "message": "Aucune vidéo sélectionnée."
+        }), 400
+
+    filename = secure_filename(video_file.filename)
+
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    os.makedirs(upload_folder, exist_ok=True)
+
+    video_path = os.path.abspath(
+        os.path.join(upload_folder, filename)
+    )
+
+    try:
+        # 1. Sauvegarder la vidéo
+        video_file.save(video_path)
+
+        # 2. Analyser la vidéo et enregistrer l'accident si détecté
+        accident = detect_and_save_accident(video_path)
+
+        # 3. Renvoyer le résultat au frontend
+        response_data = {
+            "status": "success",
+            "path": filename,
+            "accident_detected": accident is not None
+        }
+
+        if accident is not None:
+            response_data["accident_id"] = accident["id"]
+            response_data["detection_confidence"] = accident["confidence"]
+            response_data["message"] = (
+                "Accident détecté et enregistré dans MongoDB."
+            )
+        else:
+            response_data["message"] = (
+                "Aucun accident détecté au-dessus du seuil."
+            )
+
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        current_app.logger.exception("Erreur pendant l'analyse vidéo")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+       
 # ROUTES FOR SHOW VIDEO...
 @public_bp.route('/show-video/static/videos/<path>', methods=['GET'])
 def show_video(path):

@@ -23,7 +23,7 @@ export default function OgDataTable({}: Props) {
   } = useQuery({
     queryKey: ["accidents"],
     queryFn: async () => {
-      const response = await fetch("http://127.0.0.1:8080/api/v1/accident/all");
+      const response = await fetch("http://127.0.0.1:5000/api/v1/accident/all");
       return await response.json();
     },
   });
